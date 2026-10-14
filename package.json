@@ -1,0 +1,17 @@
+{
+  "name": "lyric-kinetic-motion-graphic",
+  "version": "1.0.0",
+  "description": "Reverse Jing-Jing (逆晶晶體) — lyric kinetic typography film, rendered frame-by-frame with Canvas + ffmpeg",
+  "main": "render.js",
+  "scripts": {
+    "stills": "node render.js --stills 8.3,22.2,45.3,72.2,137.9,201",
+    "render": "./build.sh song.mp3"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "@napi-rs/canvas": "^1.0.11"
+  },
+  "private": true
+}

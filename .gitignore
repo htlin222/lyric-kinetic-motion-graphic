@@ -1,0 +1,7 @@
+node_modules/
+out/
+fonts/*.otf
+fonts/*.ttc
+*.mp3
+*.wav
+work/
