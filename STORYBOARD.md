@@ -1,6 +1,7 @@
 # Storyboard — REVERSE JING-JING（逆晶晶體）
 
-152 BPM · 3:46 · 1920×1080 @ 30 fps. Every lyric line is timed to the vocal using Whisper word timestamps (see README → Pipeline).
+作者 Song by **Benson Hung** ([youtube.com/@hbshun](https://www.youtube.com/@hbshun)) · 152 BPM · 3:46 · 1920×1080 @ 30 fps.
+Every word, and every 中文 character, is timed to its vocal attack in the waveform (see README → Sync).
 
 ## Visual concept
 A tongue-in-cheek **"international elite" award-show / press conference**: gold leaf, glitter, a rotating wireframe globe, a breaking-news ticker, and dead-serious serif type.
@@ -19,7 +20,7 @@ The joke is the *language switch*, so English and 中文 get two opposite motion
 ## Sections
 | # | Time | Lines | Theme / background | Shot exit | Boundary FX |
 |---|---|---|---|---|---|
-| 00 LIVE FROM HARVARD | 0:00–0:12 | intro | Press room: spotlight, perspective gold floor grid, 3D globe, gold dust | zoom-through | — |
+| 00 LIVE FROM HARVARD | 0:00–0:12 | intro | Credit card (作者 Benson Hung) → press room: spotlight, gold floor grid, video wall, gold dust | zoom-through | — |
 | 01 THE PRESS CONFERENCE | 0:12–0:25 | 0–3 | press + LIVE bug + BREAKING ticker | whip pan | flash |
 | 02 CODE-SWITCH | 0:25–0:43 | 4–12 | Glam: violet, rotating sunburst, bokeh | zoom-through | flash |
 | 03 REVERSE JING-JING | 0:44–1:08 | 13–24 | Chorus: black, 3D gold/red frame tunnel, mirrored text wall, letterbox | mirror flip | **frame mirror + REWIND** |
@@ -46,6 +47,20 @@ The joke is the *language switch*, so English and 中文 get two opposite motion
 * **"Maximum flexibility / Minimum hesitation"**: a scale gag (huge vs. tiny).
 * **"ALL HAIL THE KING" / "Long live the king"**: a 3D gold crown drops in.
 * **Outro**: International · Professional · Bilingual · Wayne style · 中文 stack one per beat → **Perfect** → end card.
+
+## Audio-reactive layer (real waveform data)
+* **Press:** a gold broadcast scope line on the horizon. The 3D video wall has 8 panels, and each panel swaps its graphic every 8 beats: live spectrum, vox scope, confidence level meter, 雙語指數 chart, globe, ON AIR, an EN⇄中 flip, and a reach map. On top of that:
+  * a HEADLINE card that flips between English and 中文
+  * Taipei / London / Boston clocks
+  * a market strip (中文 ▲, ENGLISH ▼, HESITATION ▼99%)
+  * the BREAKING ticker
+* **Glam:** a radial spectrum ring around the lyric.
+* **Chorus / finale:** a 3D spectrum ridgeline terrain, 28 history slices flying toward the camera, mirrored with bass at the centre.
+* **Academy:** a mirrored level-meter waveform.
+* **Alert:** a red oscilloscope.
+
+## Chorus entry
+The previous shot does a single eased 360° Y-spin with motion-blur ghosts. It cuts on the edge-on frame, and the chorus spins in **mirrored**, then lands front-facing exactly on the first "Re-" syllable. The extra "Reverse Jing Jing" chants at 1:44 and 2:49 have their own shots.
 
 ## Global camera
 * Every shot runs a slow dolly-in (+1.8 %/s) with a rotational drift.

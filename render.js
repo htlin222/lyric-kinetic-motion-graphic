@@ -66,6 +66,9 @@ const nearestBeat = (t) => beats.reduce((b, x) => (Math.abs(x - t) < Math.abs(b 
 // ---------- structure ----------
 const lines = TL;
 const sections = SB.sections.map((s, i) => ({ ...s, t0: s.from < 0 ? 0 : lines[s.from].start - 0.15 }));
+// mirror-spin sections cut exactly at the spin's edge-on midpoint (spin lands on the first syllable)
+const SPIN = 0.42;
+sections.forEach((s) => { if (s.fx === 'mirror') { s.land = lines[s.from].tokens[0].s + 0.02; s.t0 = s.land - SPIN * (1 - 0.397); /* first edge-on moment of the eased spin */ } });
 sections.forEach((s, i) => (s.t1 = i < sections.length - 1 ? sections[i + 1].t0 : DURATION + 1));
 const sectionAt = (t) => sections.find((s) => t >= s.t0 && t < s.t1) || sections[sections.length - 1];
 
@@ -82,23 +85,28 @@ scenes.forEach((s, i) => {
   s.section = sectionAt(Math.max(0, s.t0 + 0.2));
   s.idx = i;
 });
+// the shot before a mirror spin is hard-cut at the midpoint instead of running its own exit
+for (const sec of sections) if (sec.fx === 'mirror') {
+  const prev = scenes.filter((sc) => sc.t0 < sec.t0 - 0.05).pop();
+  if (prev) { prev.cutAt = sec.t0; prev.exitAt = Math.max(prev.exitAt, sec.t0 + 1); }
+}
 
 // impacts: shake + flash events
+// Visual impact lands on the vocal attack (+HIT). Slams start SLAM seconds earlier.
+const HIT = 0.02, SLAM = 0.11;
+const HAN = /[\u4e00-\u9fff]/;
 const impacts = [];
 for (const sc of scenes) {
   for (const id of sc.ids) {
     const L = lines[id];
-    if (sc.layout === 'climax') {
-      const chars = [...'雙語國際競爭力'];
-      chars.forEach((c, k) => impacts.push({ t: L.start + k * ((L.end - L.start - 0.5) / (chars.length - 1)) + 0.12, a: 34, f: 0.55 }));
-      continue;
-    }
-    if (sc.layout === 'chorus') { impacts.push({ t: L.start + 0.18, a: 22, f: 0.35 }); continue; }
-    if (sc.layout === 'hero') { impacts.push({ t: L.tokens[0].s + 0.12, a: 16, f: 0.25 }); continue; }
-    for (const tk of L.tokens) if (tk.cjk) impacts.push({ t: tk.s + 0.12, a: 16, f: 0.22 });
+    if (sc.layout === 'climax') { (L.tokens[0].chars || []).forEach((c) => impacts.push({ t: c + HIT, a: 34, f: 0.55 })); continue; }
+    if (sc.layout === 'chorus') { L.tokens.forEach((tk, k) => impacts.push({ t: tk.s + HIT, a: k ? 14 : 22, f: k ? 0.16 : 0.35 })); continue; }
+    if (sc.layout === 'hero') { impacts.push({ t: L.tokens[0].s + HIT, a: 16, f: 0.25 }); continue; }
+    for (const tk of L.tokens) if (tk.cjk) (tk.chars || [tk.s]).forEach((c, k) => impacts.push({ t: c + HIT, a: k ? 8 : 16, f: k ? 0.08 : 0.22 }));
   }
 }
-impacts.push({ t: nearestBeat(8.05) + 0.12, a: 26, f: 0.5 });
+const INTRO_HIT = nearestBeat(8.05);
+impacts.push({ t: INTRO_HIT, a: 26, f: 0.5 });
 function shakeAt(t) {
   let x = 0, y = 0, r = 0;
   for (const im of impacts) {
@@ -259,13 +267,9 @@ const R = rng(42);
 const dust = Array.from({ length: 380 }, () => ({ x: (R() - 0.5) * 4000, y: (R() - 0.5) * 2400, z: R() * 3000, s: 0.5 + R() * 2.2, tw: R() * 6.28 }));
 const confetti = Array.from({ length: 260 }, () => ({ x: (R() - 0.5) * 2600, y: -R() * 2600, z: 300 + R() * 2200, r: R() * 6.28, vr: (R() - 0.5) * 8, c: R(), w: 10 + R() * 18 }));
 const FOC = 900;
-function camZ(t) {
-  // camera dolly speed per section
-  let z = 0; const step = 1 / 10;
-  for (let tt = 0; tt < t; tt += step) { const th = sectionAt(tt).theme; z += step * (th === 'chorus' || th === 'finale' ? 900 : th === 'alert' ? 500 : 260); }
-  return z;
-}
-const camZcache = []; for (let i = 0; i <= Math.ceil(DURATION * 10) + 20; i++) camZcache[i] = camZ(i / 10);
+const SPD = []; for (let i = 0; i <= Math.ceil(DURATION * 10) + 40; i++) { const th = sectionAt(i / 10).theme; SPD.push(th === 'chorus' || th === 'finale' ? 900 : th === 'alert' ? 500 : 260); }
+const SPDs = SPD.map((_, i) => { let a = 0, n = 0; for (let k = -8; k <= 8; k++) { const v = SPD[i + k]; if (v != null) { a += v; n++; } } return a / n; });
+const camZcache = [0]; for (let i = 1; i < SPDs.length; i++) camZcache[i] = camZcache[i - 1] + SPDs[i - 1] * 0.1;
 const camZat = (t) => { const i = Math.floor(t * 10); const f = t * 10 - i; return lerp(camZcache[i] || 0, camZcache[i + 1] || 0, f); };
 
 function drawDust(ctx, t, color, amt = 1) {
@@ -365,6 +369,7 @@ function drawLaurel(ctx, t, cx, cy, r) {
   ctx.restore();
 }
 
+const FX = require('./src/fx_audio.js')({ W, H, CX, CY, C, clamp, lerp, beatPulse, envAt, rng, goldGrad, measure, drawGlobe });
 function drawBackground(ctx, t, sec, sc) {
   ctx.fillStyle = '#000'; ctx.fillRect(0, 0, W, H);
   const th = sec.theme, bp = beatPulse(t), bass = bassAt(t);
@@ -376,19 +381,22 @@ function drawBackground(ctx, t, sec, sc) {
     ctx.save(); const sp = ctx.createLinearGradient(0, 0, 0, H); sp.addColorStop(0, 'rgba(255,230,170,0.16)'); sp.addColorStop(1, 'rgba(255,230,170,0)');
     ctx.fillStyle = sp; ctx.beginPath(); const sw = Math.sin(t * 0.4) * 200; ctx.moveTo(CX - 60 + sw, -10); ctx.lineTo(CX + 60 + sw, -10); ctx.lineTo(CX + 700 + sw * 2, H); ctx.lineTo(CX - 700 + sw * 2, H); ctx.fill(); ctx.restore();
     drawFloor(ctx, t, C.gold, 0.22);
-    drawGlobe(ctx, t, W - 260, 300, 190, th === 'outro' ? 0.18 : 0.32);
+    if (th === 'press') { FX.videoWall(ctx, t, sec.name === 'intro' ? 0.35 : 0.7); FX.scopeLine(ctx, t, CY + 150, 120, '#f3cf6c', 0.55, 22, 3); }
+    else { FX.scopeLine(ctx, t, CY + 240, 90, '#f3cf6c', 0.35, 14, 2); drawGlobe(ctx, t, W - 260, 300, 190, 0.18); }
     drawDust(ctx, t, '#ffe1a0', 0.8);
   } else if (th === 'glam') {
     g = ctx.createRadialGradient(CX, CY, 50, CX, CY, 1300); g.addColorStop(0, '#3a1d4a'); g.addColorStop(0.5, '#160a22'); g.addColorStop(1, '#040208');
     ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
     drawRays(ctx, t, '#f2c45a', 0.05 + bp * 0.05);
     drawBokeh(ctx, t);
+    FX.ring(ctx, t, CX, CY - 30, 330, 0.5);
     drawDust(ctx, t, '#ffd27a', 1);
   } else if (th === 'chorus' || th === 'finale') {
     ctx.fillStyle = th === 'finale' ? '#0d0802' : '#020203'; ctx.fillRect(0, 0, W, H);
     if (th === 'finale') drawRays(ctx, t, '#f6cf63', 0.06 + bp * 0.08, 32);
     drawReverseWall(ctx, t);
     drawTunnel(ctx, t, bp);
+    FX.ridgeline(ctx, t, 'rgba(233,194,90,0.85)', '#fff3c4', 1);
     g = ctx.createRadialGradient(CX, CY, 0, CX, CY, 700); g.addColorStop(0, `rgba(255,200,90,${0.12 + bass * 0.18})`); g.addColorStop(1, 'rgba(0,0,0,0)');
     ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
     drawDust(ctx, t, '#fff0c0', 1.2);
@@ -408,6 +416,7 @@ function drawBackground(ctx, t, sec, sc) {
     }
     ctx.globalAlpha = 1;
     drawLaurel(ctx, t, CX, CY - 30, 430);
+    FX.envWave(ctx, t, CY + 400, 70, 'rgba(233,194,90,0.4)', 1);
     drawDust(ctx, t, '#e8d9a8', 0.7);
   } else if (th === 'alert') {
     const flick = 0.85 + 0.15 * Math.sin(t * 40);
@@ -422,6 +431,7 @@ function drawBackground(ctx, t, sec, sc) {
     }
     ctx.save(); ctx.globalAlpha = 0.08; ctx.fillStyle = '#000'; for (let y = 0; y < H; y += 4) ctx.fillRect(0, y, W, 2); ctx.restore();
     drawTunnel(ctx, t, bp * 0.6);
+    FX.scopeLine(ctx, t, CY + 300, 170, '#ff3355', 0.9, 24, 4);
   }
 }
 function drawConfetti(ctx, t, t0) {
@@ -440,8 +450,8 @@ function drawConfetti(ctx, t, t0) {
 // ---------- token animation ----------
 function drawItem(ctx, it, t, sc, ex) {
   const tk = it.tk; const kind = it.kind;
-  const s = tk.s - 0.06;
-  if (t < s - 0.02) return;
+  const s = tk.s - 0.05;
+  if (t < tk.s - 0.3) return;
   const sh = ex.shatter ? ex.shatter : 0;
   ctx.save();
   if (sh) {
@@ -474,26 +484,38 @@ function drawItem(ctx, it, t, sc, ex) {
       ctx.restore();
     }
   } else if (kind === 'cjk') {
-    // stamp slam
-    const d = t - s; const p = clamp(d / 0.18);
-    const sc0 = p < 1 ? lerp(2.6, 1, E.inQuad(p)) : 1 + 0.06 * Math.exp(-(d - 0.18) * 10) * Math.sin((d - 0.18) * 40);
-    const a = clamp(d / 0.08);
+    // each Han character slams on its own vocal attack; punctuation rides with the previous one
+    const glyphs = [...tk.t]; const times = tk.chars || [tk.s];
+    let hi = 0;
+    const gt = glyphs.map((ch) => { if (HAN.test(ch)) { const v = times[Math.min(hi, times.length - 1)]; hi++; return v; } return times[Math.max(0, hi - 1)] + 0.04; });
+    const tLast = Math.max(...gt);
     const cx = it.x + it.w / 2;
-    ctx.save(); ctx.translate(cx, it.y); ctx.scale(sc0, sc0); ctx.rotate((1 - p) * 0.12);
-    // red seal frame
-    if (p >= 1) {
-      const q = E.outBack(clamp((d - 0.18) / 0.22));
-      ctx.save(); ctx.rotate(-0.045); ctx.scale(lerp(1.25, 1, q), lerp(1.25, 1, q)); ctx.globalAlpha = 0.9 * q * (ex.dim ? 0.5 : 1);
+    const dl = t - (tLast + HIT);
+    if (dl > 0) { // red seal frame closes around the word after the last syllable
+      const q = E.outBack(clamp(dl / 0.2));
+      ctx.save(); ctx.translate(cx, it.y); ctx.rotate(-0.045); ctx.scale(lerp(1.25, 1, q), lerp(1.25, 1, q)); ctx.globalAlpha = 0.9 * clamp(dl / 0.08) * (ex.dim ? 0.5 : 1);
       ctx.strokeStyle = C.red; ctx.lineWidth = 7; const pw = it.w / 2 + it.size * 0.22, ph = it.size * 0.68;
       ctx.strokeRect(-pw, -ph, pw * 2, ph * 2); ctx.lineWidth = 2.5; ctx.strokeRect(-pw + 12, -ph + 12, pw * 2 - 24, ph * 2 - 24);
       ctx.restore();
     }
-    const ca = p < 1 ? 14 : 10 * Math.exp(-(d - 0.18) * 6);
-    drawText(ctx, tk.t, -it.w / 2, 0, it.font, it.size, { alpha: a * (ex.dim ? 0.55 : 1), fill: 'gold', extrude: 12, ca, glow: 26 * Math.exp(-d * 3) + 6, w: it.w });
-    ctx.restore();
-    // ink spatter on impact
-    if (d > 0.18 && d < 0.6) {
-      const r = rng(Math.floor(tk.s * 1000)); const q = (d - 0.18) / 0.42;
+    let x = it.x;
+    glyphs.forEach((ch, k) => {
+      const cw = measure(ctx, it.font, ch);
+      const d = t - (gt[k] + HIT - SLAM);
+      if (d >= 0) {
+        const p = clamp(d / SLAM); const after = d - SLAM;
+        const sc0 = p < 1 ? lerp(2.8, 1, E.inQuad(p)) : 1 + 0.07 * Math.exp(-after * 10) * Math.sin(after * 40);
+        ctx.save(); ctx.translate(x + cw / 2, it.y); ctx.scale(sc0, sc0); ctx.rotate((1 - p) * (k % 2 ? 0.14 : -0.14));
+        const ca = p < 1 ? 14 : 10 * Math.exp(-after * 6);
+        drawText(ctx, ch, -cw / 2, 0, it.font, it.size, { alpha: clamp(d / 0.05) * (ex.dim ? 0.55 : 1), fill: 'gold', extrude: 12, ca, glow: 26 * Math.exp(-Math.max(0, after) * 3) + 6, w: cw });
+        ctx.restore();
+      }
+      x += cw;
+    });
+    // ink spatter on the first impact
+    const d0 = t - (gt[0] + HIT);
+    if (d0 > 0 && d0 < 0.45) {
+      const r = rng(Math.floor(tk.s * 1000)); const q = d0 / 0.45;
       ctx.save(); ctx.fillStyle = C.gold;
       for (let i = 0; i < 26; i++) {
         const ang = r() * 6.283, sp = 200 + r() * 520; ctx.globalAlpha = 1 - q;
@@ -505,9 +527,9 @@ function drawItem(ctx, it, t, sc, ex) {
     const chars = [...tk.t]; let x = it.x;
     chars.forEach((ch, i) => {
       const cw = measure(ctx, it.font, ch);
-      const d = t - (s + i * 0.035); const p = E.outBack(clamp(d / 0.4));
+      const d = t - (tk.s + HIT - 0.22 + i * 0.022); const p = E.outBack(clamp(d / 0.24));
       if (d < 0) { x += cw; return; }
-      ctx.save(); ctx.translate(x + cw / 2, it.y + (1 - clamp(d / 0.4)) * -160);
+      ctx.save(); ctx.translate(x + cw / 2, it.y + (1 - clamp(d / 0.24)) * -160);
       ctx.scale(Math.max(0.04, Math.abs(Math.cos((1 - clamp(p)) * 1.5708))), 1);
       drawText(ctx, ch, -cw / 2, 0, it.font, it.size, { fill: 'gold', extrude: 14, glow: 20, alpha: clamp(d / 0.12), w: cw });
       ctx.restore(); x += cw;
@@ -519,8 +541,8 @@ function drawItem(ctx, it, t, sc, ex) {
     const tokOffset = L.tokens.slice(0, L.tokens.indexOf(tk)).reduce((a, x) => a + x.t.length + 1, 0);
     chars.forEach((ch, i) => {
       const cw = measure(ctx, it.font, ch);
-      const order = allChars - 1 - (tokOffset + i);
-      const d = t - (L.start - 0.04 + order * 0.028); const p = E.outCubic(clamp(d / 0.34));
+      const order = chars.length - 1 - i;
+      const d = t - (tk.s + HIT - 0.2 + order * 0.022); const p = E.outCubic(clamp(d / 0.2));
       if (d < 0) { x += cw; return; }
       const sxv = -Math.cos(Math.PI * p);
       ctx.save(); ctx.translate(x + cw / 2, it.y);
@@ -607,16 +629,28 @@ function drawSceneContent(ctx, sc, t, ex) {
 
 function drawIntro(ctx, t) {
   // 0-12s: globe assembles, "LIVE FROM HARVARD", title flips in reversed, 逆晶晶體 stamp
-  const hit = nearestBeat(8.05);
-  const p1 = E.outExpo(prog(t, 1.2, 1.2));
+  const hit = INTRO_HIT + 0.12;
+  // credit card
+  const c1 = E.outExpo(prog(t, 0.3, 0.9)) * (1 - prog(t, 3.9, 0.5));
+  if (c1 > 0) {
+    ctx.save(); ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.globalAlpha = c1;
+    ctx.font = '30px NKB'; ctx.fillStyle = C.gold; ctx.fillText('作者   ·   S O N G   B Y', CX, CY - 120 - (1 - c1) * 20);
+    ctx.shadowColor = 'rgba(255,210,110,0.7)'; ctx.shadowBlur = 30;
+    ctx.font = 'italic 150px PFI'; ctx.fillStyle = goldGrad(ctx, CY - 10, 150); ctx.fillText('Benson Hung', CX, CY - 10);
+    ctx.shadowBlur = 0; ctx.strokeStyle = C.gold; ctx.lineWidth = 2; const lw = 380 * c1;
+    ctx.beginPath(); ctx.moveTo(CX - lw, CY + 80); ctx.lineTo(CX + lw, CY + 80); ctx.stroke();
+    ctx.font = '600 40px CG'; ctx.fillStyle = C.ivory; ctx.fillText('youtube.com/@hbshun', CX, CY + 130);
+    ctx.restore();
+  }
+  const p1 = E.outExpo(prog(t, 4.3, 1.0));
   ctx.save(); ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
   const spacing = lerp(60, 18, p1);
   ctx.font = '600 34px CG'; ctx.fillStyle = C.gold; ctx.globalAlpha = p1 * (1 - prog(t, 10.6, 0.4));
   const s1 = 'L I V E   F R O M   T H E   P O D I U M';
   ctx.fillText(s1.split('').join(' '.repeat(spacing > 40 ? 1 : 0)), CX, 300);
-  ctx.globalAlpha = E.outExpo(prog(t, 2.6, 1)) * (1 - prog(t, 10.6, 0.4));
+  ctx.globalAlpha = E.outExpo(prog(t, 4.8, 1)) * (1 - prog(t, 10.6, 0.4));
   ctx.font = 'italic 64px PFI'; ctx.fillStyle = C.ivory; ctx.fillText('An International Press Conference', CX, 380);
-  ctx.strokeStyle = C.gold; ctx.lineWidth = 2; const lw = 420 * E.outExpo(prog(t, 3.2, 1));
+  ctx.strokeStyle = C.gold; ctx.lineWidth = 2; const lw = 420 * E.outExpo(prog(t, 5.2, 1));
   ctx.beginPath(); ctx.moveTo(CX - lw, 440); ctx.lineTo(CX + lw, 440); ctx.stroke();
   ctx.restore();
   // title
@@ -650,28 +684,28 @@ function drawIntro(ctx, t) {
 
 function drawClimax(ctx, sc, t) {
   const L = lines[sc.ids[0]]; const chars = [...'雙語國際競爭力'];
-  const step = (L.end - L.start - 0.5) / (chars.length - 1);
+  const times = L.tokens[0].chars; const tEnd = times[times.length - 1];
   const size = 210; const font = `${size}px NSB`;
   const tw = chars.reduce((a, c) => a + measure(ctx, font, c), 0) + 20 * (chars.length - 1);
   // rays behind
   const p0 = prog(t, L.start, 0.4); drawRays(ctx, t * 3, '#ffd46b', 0.12 * p0, 36, CX, CY - 40);
   let x = CX - tw / 2;
   chars.forEach((ch, i) => {
-    const cw = measure(ctx, font, ch); const d = t - (L.start + i * step);
+    const cw = measure(ctx, font, ch); const d = t - (times[i] + HIT - SLAM);
     if (d > 0) {
-      const p = clamp(d / 0.14); const s = p < 1 ? lerp(4, 1, E.inQuad(p)) : 1 + 0.08 * Math.exp(-(d - 0.14) * 8) * Math.sin(d * 50) + 0.04 * beatPulse(t);
+      const p = clamp(d / SLAM); const s = p < 1 ? lerp(4, 1, E.inQuad(p)) : 1 + 0.08 * Math.exp(-(d - SLAM) * 8) * Math.sin(d * 50) + 0.04 * beatPulse(t);
       ctx.save(); ctx.translate(x + cw / 2, CY - 40); ctx.scale(s, s); ctx.rotate((1 - p) * (i % 2 ? 0.3 : -0.3));
       drawText(ctx, ch, -cw / 2, 0, font, size, { fill: 'gold', extrude: 18, glow: 40, ca: 8 + 20 * Math.exp(-d * 5), w: cw, alpha: clamp(d / 0.05) });
       ctx.restore();
     }
     x += cw + 20;
   });
-  const q = E.outExpo(prog(t, L.end - 0.3, 0.6));
+  const q = E.outExpo(prog(t, tEnd + 0.35, 0.6));
   ctx.save(); ctx.font = '54px Anton'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = C.ivory; ctx.globalAlpha = q;
   const label = 'BILINGUAL  GLOBAL  COMPETITIVENESS'; ctx.fillText(label, CX, CY + 170 + (1 - q) * 40);
   ctx.restore();
   // confetti burst
-  if (t > L.start + step * 6) { drawConfetti(ctx, t, L.start); }
+  if (t > tEnd) { drawConfetti(ctx, t, tEnd - 2); }
 }
 
 function drawEndcard(ctx, t) {
@@ -680,7 +714,7 @@ function drawEndcard(ctx, t) {
   ctx.save(); ctx.globalAlpha = p; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
   ctx.font = '78px Anton'; ctx.fillStyle = C.ivory; ctx.fillText('REVERSE  JING-JING', CX, CY + 210);
   ctx.font = '48px NSB'; ctx.fillStyle = C.gold; ctx.fillText('逆 晶 晶 體', CX, CY + 290);
-  ctx.font = 'italic 28px CGI'; ctx.fillStyle = 'rgba(246,240,226,0.7)'; ctx.fillText('Bilingual Global Competitiveness™  —  a kinetic lyric film', CX, CY + 350);
+  ctx.font = '28px NKB'; ctx.fillStyle = 'rgba(246,240,226,0.85)'; ctx.fillText('作者 SONG BY  Benson Hung  ·  youtube.com/@hbshun', CX, CY + 350);
   ctx.restore();
 }
 
@@ -695,7 +729,7 @@ function drawSubtitle(ctx, t, sec) {
   if (!cur || !cur.sub) return;
   const a = E.outCubic(prog(t, cur.start - 0.1, 0.25));
   const hasTicker = sec.theme === 'press' && sec.name !== 'intro';
-  const y = hasTicker ? H - 132 : H - 92;
+  const y = hasTicker ? H - 150 : H - 92;
   const cjk = /[一-鿿]/.test(cur.sub);
   ctx.save(); ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
   ctx.font = cjk ? '36px NKB' : 'italic 600 40px CGI';
@@ -727,6 +761,9 @@ function drawLowerThird(ctx, t, sec) {
   ctx.fillStyle = Math.floor(t * 2) % 2 ? '#fff' : C.red; ctx.beginPath(); ctx.arc(176, 78, 8, 0, 6.28); ctx.fill();
   ctx.fillStyle = 'rgba(10,18,48,0.85)'; ctx.fillRect(196, 56, 560, 44); ctx.fillStyle = C.ivory; ctx.font = '24px NKB'; ctx.fillText('INTERNATIONAL PRESS CONFERENCE ｜ 國際記者會', 212, 79);
   ctx.restore();
+  FX.headline(ctx, t, 60, 116, p);
+  FX.clocks(ctx, t, p);
+  ctx.save(); ctx.translate(0, (1 - p) * 120); FX.marketStrip(ctx, t, H - 88); ctx.restore();
 }
 function drawSectionLabel(ctx, t, sec) {
   const d = t - sec.t0; if (d > 3.2 || sec.name === 'intro') return;
@@ -758,6 +795,7 @@ function exitParams(sc, t) {
 }
 function renderScene(ctx, sc, t) {
   if (t < sc.t0 - 0.05 || t > sc.exitAt + 0.3) return;
+  if (sc.cutAt && t >= sc.cutAt) return;
   const { q, type, dir } = exitParams(sc, t);
   const life = t - sc.t0;
   // slow 3D dolly-in + drift for the shot
@@ -805,10 +843,13 @@ function renderFrame(t) {
   // flash
   const fl = flashAt(t);
   // section boundary FX
-  let flipX = 1, glitch = 0, bflash = 0;
+  let flipX = 1, glitch = 0, bflash = 0, spin = 0;
   for (const s of sections) {
     const d = t - s.t0; if (s.name === 'intro') continue;
-    if (s.fx === 'mirror' && d > -0.12 && d < 0.3) flipX = Math.cos(Math.PI * clamp((d + 0.12) / 0.42) * 2) ;
+    if (s.fx === 'mirror') { // one eased 360° Y-spin, finishing exactly on the first chorus syllable
+      const q = (t - (s.land - SPIN)) / SPIN;
+      if (q > 0 && q < 1) { flipX = Math.cos(2 * Math.PI * E.inOut(q)); spin = Math.sin(Math.PI * q); }
+    }
     if (s.fx === 'glitch' && d > -0.1 && d < 0.35) glitch = 1 - clamp((d + 0.1) / 0.45);
     if (d > -0.02 && d < 0.3) bflash = Math.max(bflash, 0.45 * Math.exp(-Math.max(0, d) * 12));
   }
@@ -821,8 +862,13 @@ function renderFrame(t) {
   octx.setTransform(1, 0, 0, 1, 0, 0); octx.globalAlpha = 1;
   octx.fillStyle = '#000'; octx.fillRect(0, 0, W, H);
   octx.globalAlpha = fade;
-  if (Math.abs(flipX - 1) > 0.001) {
-    octx.save(); octx.translate(CX, CY); octx.scale(Math.sign(flipX || 1) * Math.max(0.02, Math.abs(flipX)), 1 + (1 - Math.abs(flipX)) * 0.08); octx.translate(-CX, -CY); octx.drawImage(main, 0, 0); octx.restore();
+  if (spin > 0.001) {
+    // spinning card with horizontal motion-blur ghosts
+    const sx = Math.sign(flipX || 1) * Math.max(0.03, Math.abs(flipX)), zs = 1 - 0.18 * spin;
+    for (let g = 3; g >= 0; g--) {
+      octx.save(); octx.globalAlpha = fade * (g ? 0.16 * spin : 1);
+      octx.translate(CX + (g ? (g * 40 * spin) * (flipX > 0 ? 1 : -1) : 0), CY); octx.scale(sx * zs, zs); octx.translate(-CX, -CY); octx.drawImage(main, 0, 0); octx.restore();
+    }
   } else octx.drawImage(main, 0, 0);
   if (glitch > 0) {
     const r = rng(Math.floor(t * 60));
