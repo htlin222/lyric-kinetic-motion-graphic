@@ -2,6 +2,7 @@ name: Render & Release
 on:
   push:
     tags: ['v*']
+    branches: [release]
   workflow_dispatch:
 permissions:
   contents: write
@@ -22,6 +23,6 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           TAG="${GITHUB_REF_NAME}"
-          [[ "$TAG" == v* ]] || TAG="v0.0.0-${GITHUB_SHA::7}"
-          gh release view "$TAG" >/dev/null 2>&1 || gh release create "$TAG" --title "REVERSE JING-JING (逆晶晶體) — kinetic lyric film $TAG" --notes-file .github/release-notes.md
+          [[ "$TAG" == v* ]] || TAG="$(cat VERSION)"
+          gh release view "$TAG" >/dev/null 2>&1 || gh release create "$TAG" --target "$GITHUB_SHA" --title "REVERSE JING-JING (逆晶晶體) — kinetic lyric film $TAG" --notes-file .github/release-notes.md
           gh release upload "$TAG" out/reverse-jing-jing.mp4 --clobber
