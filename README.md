@@ -28,4 +28,4 @@ Re-timing: `python3 tools/transcribe.py medium` → `tools/align.py` → `tools/
 
 Requires Node ≥ 18, ffmpeg, and Python 3 with `faster-whisper` and `librosa` (only for re-timing). Rendering takes about 100–250 ms per frame per core.
 
-The song audio is not included in this repo.
+The song is in `assets/song.mp3`. Pushing a `v*` tag triggers `.github/workflows/release.yml`, which re-renders the film and attaches the MP4 to a GitHub Release.
